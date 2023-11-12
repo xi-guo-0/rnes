@@ -1,4 +1,5 @@
 #lang racket
+(require "memory.rkt")
 
 (provide (struct-out cpu)
          (all-defined-out))
@@ -27,16 +28,16 @@
     (set-cpu-x! (cpu-a a-cpu))
     (update-zero-negative-flags a-cpu (cpu-x a-cpu))))
 
-(define (interpret a-cpu memory)
+(define (interpret a-cpu a-memory)
   (begin
     (set-cpu-pc! a-cpu 0)
     (let/ec break
             (let loop ()
-              (let ([opcode (bytes-ref memory (cpu-pc a-cpu))])
+              (let ([opcode (send a-memory read (cpu-pc a-cpu))])
                 (set-cpu-pc! a-cpu (+ (cpu-pc a-cpu) 1))
                 (match opcode
                   [#xa9
-                   (let ([param (bytes-ref memory (cpu-pc a-cpu))])
+                   (let ([param (send a-memory read (cpu-pc a-cpu))])
                      (set-cpu-pc! a-cpu (+ (cpu-pc a-cpu) 1))
                      (lda a-cpu param))]
                   [#xaa (tax a-cpu)]
@@ -48,6 +49,8 @@
   (require rackunit)
   (test-case "LDA Immediate"
     (let ([a-cpu (create-cpu)])
-      (interpret a-cpu (bytes #xa9 #x15 #x00))
+      (interpret a-cpu (let ([a-memory (new memory%)])
+                         (send a-memory load #x0 (bytes #xa9 #x15 #x00))
+                         a-memory))
       (check-equal? #x15 (cpu-a a-cpu))
       (check-equal? #f (cpu-z a-cpu)))))
