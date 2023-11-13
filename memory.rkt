@@ -6,11 +6,11 @@
   (class object%
     (field (m (make-bytes #xffff)))
     (define/public (read addr) (bytes-ref m addr))
-    (define/public (read_u16 addr)
+    (define/public (read-u16 addr)
       (let ([lo (bytes-ref m addr)] [hi (bytes-ref m (add1 addr))])
         (bitwise-ior (arithmetic-shift hi 8) lo)))
     (define/public (write addr val) (bytes-set! m addr val))
-    (define/public (write_u16 addr val)
+    (define/public (write-u16 addr val)
       (let ([hi (arithmetic-shift val -8)] [lo (bitwise-and val #xff)])
         (begin
           (write addr lo)
@@ -24,9 +24,9 @@
     (let ([a-memory (new memory%)])
       (send a-memory write #x0 #x1)
       (check-equal? #x1 (send a-memory read #x0))))
-  (test-case "memory% write_u16"
+  (test-case "memory% write-u16"
     (let ([a-memory (new memory%)])
-      (send a-memory write_u16 #x0 #x1234)
+      (send a-memory write-u16 #x0 #x1234)
       (check-equal? #x34 (send a-memory read #x0))
       (check-equal? #x12 (send a-memory read #x1))
-      (check-equal? #x1234 (send a-memory read_u16 #x0)))))
+      (check-equal? #x1234 (send a-memory read-u16 #x0)))))

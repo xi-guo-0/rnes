@@ -30,7 +30,7 @@
 
 (define (interpret a-cpu a-memory)
   (begin
-    (set-cpu-pc! a-cpu 0)
+    (set-cpu-pc! a-cpu (send a-memory read-u16 #xfffc))
     (let/ec break
             (let loop ()
               (let ([opcode (send a-memory read (cpu-pc a-cpu))])
@@ -50,7 +50,8 @@
   (test-case "LDA Immediate"
     (let ([a-cpu (create-cpu)])
       (interpret a-cpu (let ([a-memory (new memory%)])
-                         (send a-memory load #x0 (bytes #xa9 #x15 #x00))
+                         (send a-memory load #x8000 (bytes #xa9 #x15 #x00))
+                         (send a-memory write-u16 #xfffc #x8000)
                          a-memory))
       (check-equal? #x15 (cpu-a a-cpu))
       (check-equal? #f (cpu-z a-cpu)))))
