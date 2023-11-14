@@ -1,25 +1,42 @@
-#lang racket
+#lang typed/racket
 
-(provide (all-defined-out))
+(provide Memory%
+         memory%)
 
+(define-type Memory%
+             (Class (field (m Bytes))
+                    (load (-> Integer Bytes Void))
+                    (read (-> Integer Integer))
+                    (read-u16 (-> Integer Integer))
+                    (write (-> Integer Integer Void))
+                    (write-u16 (-> Integer Integer Void))))
+
+(: memory% Memory%)
 (define memory%
   (class object%
+
     (field (m (make-bytes #xffff)))
+
     (define/public (read addr) (bytes-ref m addr))
+
     (define/public (read-u16 addr)
       (let ([lo (bytes-ref m addr)] [hi (bytes-ref m (add1 addr))])
         (bitwise-ior (arithmetic-shift hi 8) lo)))
+
     (define/public (write addr val) (bytes-set! m addr val))
+
     (define/public (write-u16 addr val)
       (let ([hi (arithmetic-shift val -8)] [lo (bitwise-and val #xff)])
         (begin
           (write addr lo)
           (write (add1 addr) hi))))
+
     (define/public (load dest-start src) (bytes-copy! m dest-start src))
+
     (super-new)))
 
 (module+ test
-  (require rackunit)
+  (require typed/rackunit)
   (test-case "memory% write"
     (let ([a-memory (new memory%)])
       (send a-memory write #x0 #x1)
