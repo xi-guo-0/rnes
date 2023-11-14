@@ -7,6 +7,22 @@
 (define (create-cpu)
   (cpu 0 0 0 0 0 #f #f #f #f #f #f #f))
 
+(struct instruction (mnemonic len cycles addressing-mode))
+
+(define instructions
+  (hash #x00
+        (instruction 'BRK 1 7 'NoneAddressing)
+        #xaa
+        (instruction 'TAX 1 2 'NoneAddressing)
+        #xa9
+        (instruction 'LDA 2 2 'Immediate)
+        #xa5
+        (instruction 'LDA 2 3 'ZeroPage)
+        #xb5
+        (instruction 'LDA 2 4 'ZeroPage_X)
+        #xad
+        (instruction 'LDA 3 4 'Absolute)))
+
 (define (get-operand-address a-cpu a-memory mode)
   (match mode
     ['Immediate (cpu-pc a-cpu)]
@@ -57,23 +73,21 @@
     (let/ec break
             (let loop ()
               (let ([opcode (send a-memory read (cpu-pc a-cpu))])
-                (set-cpu-pc! a-cpu (add1 (cpu-pc a-cpu)))
-                (match opcode
-                  [#xa9
-                   (begin
-                     (lda a-cpu a-memory 'Immediate)
-                     (set-cpu-pc! a-cpu (add1 (cpu-pc a-cpu))))]
-                  [#xa5
-                   (begin
-                     (lda a-cpu a-memory 'ZeroPage)
-                     (set-cpu-pc! a-cpu (add1 (cpu-pc a-cpu))))]
-                  [#xad
-                   (begin
-                     (lda a-cpu a-memory 'Absolute)
-                     (set-cpu-pc! a-cpu (+ (cpu-pc a-cpu) 2)))]
-                  [#xaa (tax a-cpu)]
-                  [#x00 (break)]
-                  [else (error "crash!")])
+                (if (hash-has-key? instructions opcode)
+                    (let* ([a-instruction (hash-ref instructions opcode)]
+                           [mnemonic (instruction-mnemonic a-instruction)]
+                           [len (instruction-len a-instruction)]
+                           [cycles (instruction-cycles a-instruction)]
+                           [addressing-mode (instruction-addressing-mode a-instruction)])
+
+                      (set-cpu-pc! a-cpu (add1 (cpu-pc a-cpu)))
+                      (begin
+                        (match mnemonic
+                          ['LDA (lda a-cpu a-memory addressing-mode)]
+                          ['TAX (tax a-cpu)]
+                          ['BRK (break)])
+                        (set-cpu-pc! a-cpu (+ (cpu-pc a-cpu) (sub1 len)))))
+                    (error "no such insturction"))
                 (loop))))))
 
 (module+ test
