@@ -31,7 +31,10 @@
           (write addr lo)
           (write (add1 addr) hi))))
 
-    (define/public (load dest-start src) (bytes-copy! m dest-start src))
+    (define/public (load dest-start src)
+      (begin
+        (bytes-copy! m dest-start src)
+        (write-u16 #xfffc dest-start)))
 
     (super-new)))
 

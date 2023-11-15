@@ -82,7 +82,23 @@
         ([mnemonic : Symbol] [len : Integer] [cycles : Integer] [addressing : Addressing]))
 
 (define instructions
-  (hash #x00
+  (hash #x69
+        (instruction 'ADC 2 2 get-operand-immediate)
+        #x65
+        (instruction 'ADC 2 3 get-operand-zeropage)
+        #x75
+        (instruction 'ADC 2 4 get-operand-zeropage-x)
+        #x6d
+        (instruction 'ADC 3 4 get-operand-absolute)
+        #x7d
+        (instruction 'ADC 3 4 get-operand-absolute-x)
+        #x79
+        (instruction 'ADC 3 4 get-operand-absolute-y)
+        #x61
+        (instruction 'ADC 2 6 get-operand-indirect-x)
+        #x71
+        (instruction 'ADC 2 5 get-operand-indirect-y)
+        #x00
         (instruction 'BRK 1 7 get-operand-implied)
         #xaa
         (instruction 'TAX 1 2 get-operand-implied)
@@ -108,6 +124,23 @@
   (begin
     (update-zero-flag r val)
     (update-negative-flag r val)))
+
+(: set-registers-a-update! (-> registers Integer Void))
+(define (set-registers-a-update! r val)
+  (begin
+    (set-registers-a! r val)
+    (update-zero-negative-flags r (registers-a r))))
+
+(: adc (-> registers Integer Void))
+(define (adc r val)
+  (let* ([s (+ (registers-a r) val (if (registers-c r) 1 0))]
+         [c (> s #xff)]
+         [a (bitwise-and s #xff)]
+         [v (not (zero? (bitwise-and (bitwise-xor val a) (bitwise-xor (registers-a r) a) #x80)))])
+    (begin
+      (set-registers-c! r c)
+      (set-registers-v! r v)
+      (set-registers-a-update! r a))))
 
 (: lda (-> registers (Instance Memory%) Integer Void))
 (define (lda r m val)
@@ -145,6 +178,7 @@
                            [val (addressing r m)])
                       (begin
                         (match mnemonic
+                          ['ADC (adc r val)]
                           ['LDA (lda r m val)]
                           ['TAX (tax r)]
                           ['BRK (break (void))])
@@ -154,12 +188,41 @@
 
 (module+ test
   (require typed/rackunit)
+  (test-case "ADC Immediate"
+    (let ([r (create-cpu)])
+      (set-registers-a! r #x02)
+      (interpret r
+                 (let ([m (new memory%)])
+                   (send m load #x8000 (bytes #x69 #x03 #x00))
+                   m))
+      (check-equal? (registers-a r) #x05)
+      (check-equal? #f (registers-z r))
+      (check-equal? #f (registers-n r))))
+  (test-case "ADC Immediate negative"
+    (let ([r (create-cpu)])
+      (interpret r
+                 (let ([m (new memory%)])
+                   (send m load #x8000 (bytes #x69 #xf3 #x00))
+                   m))
+      (check-equal? #xf3 (registers-a r))
+      (check-equal? #f (registers-z r))
+      (check-equal? #t (registers-n r))))
+  (test-case "ADC ZeroPage"
+    (let ([r (create-cpu)])
+      (interpret r
+                 (let ([m (new memory%)])
+                   (send m write #xf3 #x37)
+                   (send m load #x8000 (bytes #x65 #xf3 #x00))
+                   m))
+      (check-equal? #x37 (registers-a r))
+      (check-equal? #f (registers-z r))
+      (check-equal? #f (registers-n r))))
+
   (test-case "LDA Immediate"
     (let ([r (create-cpu)])
       (interpret r
                  (let ([m (new memory%)])
                    (send m load #x8000 (bytes #xa9 #x15 #x00))
-                   (send m write-u16 #xfffc #x8000)
                    m))
       (check-equal? #x15 (registers-a r))
       (check-equal? #f (registers-z r))))
@@ -169,6 +232,5 @@
                  (let ([m (new memory%)])
                    (send m write #x10 #x55)
                    (send m load #x8000 (bytes #xa5 #x10 #x00))
-                   (send m write-u16 #xfffc #x8000)
                    m))
       (check-equal? #x55 (registers-a r)))))
