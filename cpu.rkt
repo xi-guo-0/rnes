@@ -23,6 +23,10 @@
 
 (define-type Addressing (-> registers (Instance Memory%) Integer))
 
+(: get-operand-accumulator Addressing)
+(define (get-operand-accumulator r m)
+  (registers-a r))
+
 (: get-operand-immediate Addressing)
 (define (get-operand-immediate r m)
   (send m read (add1 (registers-pc r))))
@@ -98,6 +102,32 @@
         (instruction 'ADC 2 6 get-operand-indirect-x)
         #x71
         (instruction 'ADC 2 5 get-operand-indirect-y)
+        #x29
+        (instruction 'AND 2 2 get-operand-immediate)
+        #x25
+        (instruction 'AND 2 3 get-operand-zeropage)
+        #x35
+        (instruction 'AND 2 4 get-operand-zeropage-x)
+        #x2d
+        (instruction 'AND 3 4 get-operand-absolute)
+        #x3d
+        (instruction 'AND 3 4 get-operand-absolute-x)
+        #x39
+        (instruction 'AND 3 4 get-operand-absolute-y)
+        #x21
+        (instruction 'AND 2 6 get-operand-indirect-x)
+        #x31
+        (instruction 'AND 2 5 get-operand-indirect-y)
+        #x0a
+        (instruction 'ASL 1 2 get-operand-accumulator)
+        #x06
+        (instruction 'ASL 2 5 get-operand-zeropage)
+        #x16
+        (instruction 'ASL 2 6 get-operand-zeropage-x)
+        #x0e
+        (instruction 'ASL 3 6 get-operand-absolute)
+        #x1e
+        (instruction 'ASL 3 7 get-operand-absolute-x)
         #x00
         (instruction 'BRK 1 7 get-operand-implied)
         #xaa
@@ -142,8 +172,19 @@
       (set-registers-v! r v)
       (set-registers-a-update! r a))))
 
-(: lda (-> registers (Instance Memory%) Integer Void))
-(define (lda r m val)
+(: instruction/and (-> registers Integer Void))
+(define (instruction/and r val)
+  (set-registers-a-update! r (bitwise-and (registers-a r) val)))
+
+(: asl (-> registers Integer Void))
+(define (asl r val)
+  (let* ([v (arithmetic-shift val 1)] [c (> v #xff)] [a (bitwise-and v #xff)])
+    (begin
+      (set-registers-c! r c)
+      (set-registers-a-update! r a))))
+
+(: lda (-> registers Integer Void))
+(define (lda r val)
   (begin
     (set-registers-a! r val)
     (update-zero-negative-flags r (registers-a r))))
@@ -179,7 +220,9 @@
                       (begin
                         (match mnemonic
                           ['ADC (adc r val)]
-                          ['LDA (lda r m val)]
+                          ['AND (instruction/and r val)]
+                          ['ASL (asl r val)]
+                          ['LDA (lda r val)]
                           ['TAX (tax r)]
                           ['BRK (break (void))])
                         (set-registers-pc! r (+ (registers-pc r) len))))
@@ -188,6 +231,16 @@
 
 (module+ test
   (require typed/rackunit)
+  (test-case "ASL Accumulator"
+    (let ([r (create-cpu)])
+      (set-registers-a! r #xfe)
+      (interpret r
+                 (let ([m (new memory%)])
+                   (send m load #x8000 (bytes #x0a #x00))
+                   m))
+      (check-equal? (registers-a r) #xfc)
+      (check-equal? #t (registers-c r))
+      (check-equal? #t (registers-n r))))
   (test-case "ADC Immediate"
     (let ([r (create-cpu)])
       (set-registers-a! r #x02)
