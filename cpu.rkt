@@ -31,6 +31,9 @@
 (define (get-operand-immediate r m)
   (send m read (add1 (registers-pc r))))
 
+(: get-operand-immediate Addressing)
+(define get-operand-relative get-operand-immediate)
+
 (: get-operand-zeropage Addressing)
 (define (get-operand-zeropage r m)
   (send m read (get-operand-immediate r m)))
@@ -128,6 +131,16 @@
         (instruction 'ASL 3 6 get-operand-absolute)
         #x1e
         (instruction 'ASL 3 7 get-operand-absolute-x)
+        #x90
+        (instruction 'BCC 2 2 get-operand-relative)
+        #xb0
+        (instruction 'BCS 2 2 get-operand-relative)
+        #xf0
+        (instruction 'BEQ 2 2 get-operand-relative)
+        #x24
+        (instruction 'BIT 2 3 get-operand-zeropage)
+        #x2c
+        (instruction 'BIT 3 4 get-operand-absolute)
         #x00
         (instruction 'BRK 1 7 get-operand-implied)
         #xaa
@@ -183,6 +196,30 @@
       (set-registers-c! r c)
       (set-registers-a-update! r a))))
 
+(: branch (-> registers Integer Boolean Void))
+(define (branch r val condition)
+  (if condition (set-registers-pc! r (- (+ (registers-pc r) val) 2)) (void)))
+
+(: bcc (-> registers Integer Void))
+(define (bcc r val)
+  (branch r val (not (registers-c r))))
+
+(: bcs (-> registers Integer Void))
+(define (bcs r val)
+  (branch r val (registers-c r)))
+
+(: beq (-> registers Integer Void))
+(define (beq r val)
+  (branch r val (registers-z r)))
+
+(: instruction/bit (-> registers Integer Void))
+(define (instruction/bit r val)
+  (let ([res (bitwise-and (registers-a r) val)])
+    (begin
+      (set-registers-z! r (zero? res))
+      (set-registers-n! r (not (zero? (bitwise-and #b10000000 val))))
+      (set-registers-v! r (not (zero? (bitwise-and #b01000000 val)))))))
+
 (: lda (-> registers Integer Void))
 (define (lda r val)
   (begin
@@ -222,6 +259,10 @@
                           ['ADC (adc r val)]
                           ['AND (instruction/and r val)]
                           ['ASL (asl r val)]
+                          ['BCC (bcc r val)]
+                          ['BCS (bcs r val)]
+                          ['BEQ (beq r val)]
+                          ['BIT (instruction/bit r val)]
                           ['LDA (lda r val)]
                           ['TAX (tax r)]
                           ['BRK (break (void))])
@@ -270,6 +311,14 @@
       (check-equal? #x37 (registers-a r))
       (check-equal? #f (registers-z r))
       (check-equal? #f (registers-n r))))
+  (test-case "BCS"
+    (let ([r (create-cpu)])
+      (set-registers-c! r #t)
+      (interpret r
+                 (let ([m (new memory%)])
+                   (send m load #x8000 (bytes #xb0 #x4 #x00))
+                   m))
+      (check-equal? (registers-pc r) #x8004)))
 
   (test-case "LDA Immediate"
     (let ([r (create-cpu)])
