@@ -21,7 +21,39 @@
 (define (create-cpu)
   (registers 0 0 0 0 0 #f #f #f #f #f #f #f))
 
+(: read-u16-after-pc Addressing)
+(define (read-u16-after-pc r m)
+  (send m read-u16 (add1 (registers-pc r))))
+
 (define-type Addressing (-> registers (Instance Memory%) Integer))
+
+(: get-address-immediate Addressing)
+(define (get-address-immediate r m)
+  (add1 (registers-pc r)))
+
+(: get-address-zeropage Addressing)
+(define (get-address-zeropage r m)
+  (get-operand-immediate r m))
+
+(: get-address-zeropage-x Addressing)
+(define (get-address-zeropage-x r m)
+  (+ (get-operand-immediate r m) (registers-x r)))
+
+(: get-address-zeropage-y Addressing)
+(define (get-address-zeropage-y r m)
+  (+ (get-operand-immediate r m) (registers-y r)))
+
+(: get-address-absolute Addressing)
+(define (get-address-absolute r m)
+  (read-u16-after-pc r m))
+
+(: get-address-absolute-x Addressing)
+(define (get-address-absolute-x r m)
+  (+ (read-u16-after-pc r m) (registers-x r)))
+
+(: get-address-absolute-y Addressing)
+(define (get-address-absolute-y r m)
+  (+ (read-u16-after-pc r m) (registers-y r)))
 
 (: get-operand-accumulator Addressing)
 (define (get-operand-accumulator r m)
@@ -29,38 +61,34 @@
 
 (: get-operand-immediate Addressing)
 (define (get-operand-immediate r m)
-  (send m read (add1 (registers-pc r))))
+  (send m read (get-address-immediate r m)))
 
-(: get-operand-immediate Addressing)
+(: get-operand-relative Addressing)
 (define get-operand-relative get-operand-immediate)
 
 (: get-operand-zeropage Addressing)
 (define (get-operand-zeropage r m)
-  (send m read (get-operand-immediate r m)))
+  (send m read (get-address-zeropage r m)))
 
 (: get-operand-zeropage-x Addressing)
 (define (get-operand-zeropage-x r m)
-  (send m read (+ (get-operand-immediate r m) (registers-x r))))
+  (send m read (get-address-zeropage-x r m)))
 
 (: get-operand-zeropage-y Addressing)
 (define (get-operand-zeropage-y r m)
-  (send m read (+ (get-operand-immediate r m) (registers-y r))))
-
-(: read-u16-after-pc Addressing)
-(define (read-u16-after-pc r m)
-  (send m read-u16 (add1 (registers-pc r))))
+  (send m read (get-address-zeropage-y r m)))
 
 (: get-operand-absolute Addressing)
 (define (get-operand-absolute r m)
-  (send m read (read-u16-after-pc r m)))
+  (send m read (get-address-absolute r m)))
 
 (: get-operand-absolute-x Addressing)
 (define (get-operand-absolute-x r m)
-  (send m read (+ (read-u16-after-pc r m) (registers-x r))))
+  (send m read (get-address-absolute-x r m)))
 
 (: get-operand-absolute-y Addressing)
 (define (get-operand-absolute-y r m)
-  (send m read (+ (read-u16-after-pc r m) (registers-y r))))
+  (send m read (get-address-absolute-y r m)))
 
 (: get-operand-indirect-x Addressing)
 (define (get-operand-indirect-x r m)
@@ -141,8 +169,62 @@
         (instruction 'BIT 2 3 get-operand-zeropage)
         #x2c
         (instruction 'BIT 3 4 get-operand-absolute)
+        #x30
+        (instruction 'BMI 2 2 get-operand-relative)
+        #xd0
+        (instruction 'BNE 2 2 get-operand-relative)
+        #x10
+        (instruction 'BPL 2 2 get-operand-relative)
         #x00
         (instruction 'BRK 1 7 get-operand-implied)
+        #x50
+        (instruction 'BVC 2 2 get-operand-relative)
+        #x70
+        (instruction 'BVS 2 2 get-operand-relative)
+        #x18
+        (instruction 'CLC 1 2 get-operand-implied)
+        #xd8
+        (instruction 'CLD 1 2 get-operand-implied)
+        #x58
+        (instruction 'CLI 1 2 get-operand-implied)
+        #xb8
+        (instruction 'CLV 1 2 get-operand-implied)
+        #xc9
+        (instruction 'CMP 2 2 get-operand-immediate)
+        #xc5
+        (instruction 'CMP 2 3 get-operand-zeropage)
+        #xd5
+        (instruction 'CMP 2 4 get-operand-zeropage-x)
+        #xcd
+        (instruction 'CMP 3 4 get-operand-absolute)
+        #xdd
+        (instruction 'CMP 3 4 get-operand-absolute-x)
+        #xd9
+        (instruction 'CMP 3 4 get-operand-absolute-y)
+        #xc1
+        (instruction 'CMP 2 6 get-operand-indirect-x)
+        #xd1
+        (instruction 'CMP 2 5 get-operand-indirect-y)
+        #xe0
+        (instruction 'CPX 2 2 get-operand-immediate)
+        #xe4
+        (instruction 'CPX 2 3 get-operand-zeropage)
+        #xec
+        (instruction 'CPX 3 4 get-operand-absolute)
+        #xc0
+        (instruction 'CPY 2 2 get-operand-immediate)
+        #xc4
+        (instruction 'CPY 2 3 get-operand-zeropage)
+        #xcc
+        (instruction 'CPY 3 4 get-operand-absolute)
+        #xc6
+        (instruction 'DEC 2 5 get-address-zeropage)
+        #xd6
+        (instruction 'DEC 2 6 get-address-zeropage-x)
+        #xce
+        (instruction 'DEC 3 6 get-address-absolute)
+        #xde
+        (instruction 'DEC 3 7 get-address-absolute-x)
         #xaa
         (instruction 'TAX 1 2 get-operand-implied)
         #xa9
@@ -154,25 +236,25 @@
         #xad
         (instruction 'LDA 3 4 get-operand-absolute)))
 
-(: update-zero-flag (-> registers Integer Void))
-(define (update-zero-flag r val)
+(: update-zero-flag! (-> registers Integer Void))
+(define (update-zero-flag! r val)
   (set-registers-z! r (zero? val)))
 
-(: update-negative-flag (-> registers Integer Void))
-(define (update-negative-flag r val)
+(: update-negative-flag! (-> registers Integer Void))
+(define (update-negative-flag! r val)
   (set-registers-n! r (not (zero? (bitwise-and #b10000000 val)))))
 
-(: update-zero-negative-flags (-> registers Integer Void))
-(define (update-zero-negative-flags r val)
+(: update-zero-negative-flags! (-> registers Integer Void))
+(define (update-zero-negative-flags! r val)
   (begin
-    (update-zero-flag r val)
-    (update-negative-flag r val)))
+    (update-zero-flag! r val)
+    (update-negative-flag! r val)))
 
 (: set-registers-a-update! (-> registers Integer Void))
 (define (set-registers-a-update! r val)
   (begin
     (set-registers-a! r val)
-    (update-zero-negative-flags r (registers-a r))))
+    (update-zero-negative-flags! r (registers-a r))))
 
 (: adc (-> registers Integer Void))
 (define (adc r val)
@@ -220,17 +302,84 @@
       (set-registers-n! r (not (zero? (bitwise-and #b10000000 val))))
       (set-registers-v! r (not (zero? (bitwise-and #b01000000 val)))))))
 
+(: bmi (-> registers Integer Void))
+(define (bmi r val)
+  (branch r val (registers-n r)))
+
+(: bne (-> registers Integer Void))
+(define (bne r val)
+  (branch r val (not (registers-z r))))
+
+(: bpl (-> registers Integer Void))
+(define (bpl r val)
+  (branch r val (not (registers-n r))))
+
+(: bvc (-> registers Integer Void))
+(define (bvc r val)
+  (branch r val (not (registers-v r))))
+
+(: bvs (-> registers Integer Void))
+(define (bvs r val)
+  (branch r val (registers-v r)))
+
+(: clc (-> registers Integer Void))
+(define (clc r val)
+  (set-registers-c! r #f))
+
+(: cld (-> registers Integer Void))
+(define (cld r val)
+  (set-registers-d! r #f))
+
+(: cli (-> registers Integer Void))
+(define (cli r val)
+  (set-registers-i! r #f))
+
+(: clv (-> registers Integer Void))
+(define (clv r val)
+  (set-registers-v! r #f))
+
+(: cmp (-> registers Integer Void))
+(define (cmp r val)
+  (let ([a (- (registers-a r) val)])
+    (begin
+      (set-registers-c! r (>= a 0))
+      (set-registers-z! r (zero? a))
+      (set-registers-n! r (not (zero? (bitwise-and #b10000000 a)))))))
+
+(: cpx (-> registers Integer Void))
+(define (cpx r val)
+  (let ([a (- (registers-x r) val)])
+    (begin
+      (set-registers-c! r (>= a 0))
+      (set-registers-z! r (zero? a))
+      (set-registers-n! r (not (zero? (bitwise-and #b10000000 a)))))))
+
+(: cpy (-> registers Integer Void))
+(define (cpy r val)
+  (let ([a (- (registers-y r) val)])
+    (begin
+      (set-registers-c! r (>= a 0))
+      (set-registers-z! r (zero? a))
+      (set-registers-n! r (not (zero? (bitwise-and #b10000000 a)))))))
+
+(: dec (-> registers (Instance Memory%) Integer Void))
+(define (dec r m addr)
+  (let ([val (sub1 (send m read addr))])
+    (begin
+      (send m write addr val)
+      (update-zero-negative-flags! r val))))
+
 (: lda (-> registers Integer Void))
 (define (lda r val)
   (begin
     (set-registers-a! r val)
-    (update-zero-negative-flags r (registers-a r))))
+    (update-zero-negative-flags! r (registers-a r))))
 
 (: tax (-> registers Void))
 (define (tax r)
   (begin
     (set-registers-x! r (registers-a r))
-    (update-zero-negative-flags r (registers-x r))))
+    (update-zero-negative-flags! r (registers-x r))))
 
 (: interpret (-> registers (Instance Memory%) Void))
 (define (interpret r m)
@@ -263,9 +412,22 @@
                           ['BCS (bcs r val)]
                           ['BEQ (beq r val)]
                           ['BIT (instruction/bit r val)]
+                          ['BMI (bmi r val)]
+                          ['BNE (bne r val)]
+                          ['BPL (bpl r val)]
+                          ['BRK (break (void))]
+                          ['BVC (bvc r val)]
+                          ['BVS (bvs r val)]
+                          ['CLC (clc r val)]
+                          ['CLD (cld r val)]
+                          ['CLI (cli r val)]
+                          ['CLV (clv r val)]
+                          ['CMP (cmp r val)]
+                          ['CPX (cpx r val)]
+                          ['CPY (cpy r val)]
+                          ['DEC (dec r m val)]
                           ['LDA (lda r val)]
-                          ['TAX (tax r)]
-                          ['BRK (break (void))])
+                          ['TAX (tax r)])
                         (set-registers-pc! r (+ (registers-pc r) len))))
                     (error "no such insturction"))
                 (loop))))))
@@ -319,6 +481,22 @@
                    (send m load #x8000 (bytes #xb0 #x4 #x00))
                    m))
       (check-equal? (registers-pc r) #x8004)))
+
+  (test-case "CPY Immediate"
+    (let ([r (create-cpu)] [m (new memory%)])
+      (set-registers-y! r #x01)
+      (send m load #x8000 (bytes #xc0 #x02 #x00))
+      (interpret r m)
+      (check-equal? (registers-c r) #f)
+      (check-equal? (registers-z r) #f)
+      (check-equal? (registers-n r) #t)))
+
+  (test-case "DEC Absolute"
+    (let ([r (create-cpu)] [m (new memory%)])
+      (send m write #x1234 #x56)
+      (send m load #x8000 (bytes #xce #x34 #x12 #x00))
+      (interpret r m)
+      (check-equal? (send m read #x1234) #x55)))
 
   (test-case "LDA Immediate"
     (let ([r (create-cpu)])
