@@ -17,13 +17,40 @@
                        [n : Boolean])
   #:mutable)
 
+(define stack-base #x0100)
+(define stack-init-val #xfd)
+
 (: create-cpu (-> registers))
 (define (create-cpu)
-  (registers 0 0 0 0 0 #f #f #f #f #f #f #f))
+  (registers 0 0 0 stack-init-val 0 #f #f #f #f #f #f #f))
 
 (: read-u16-after-pc Addressing)
 (define (read-u16-after-pc r m)
   (send m read-u16 (add1 (registers-pc r))))
+
+(: stack-push (-> registers (Instance Memory%) Integer Void))
+(define (stack-push r m val)
+  (begin (send m write (+ stack-base (registers-s r)) val)
+         (set-registers-s! r (sub1 (registers-s r)))))
+
+(: stack-push-u16 (-> registers (Instance Memory%) Integer Void))
+(define (stack-push-u16 r m val)
+  (let ([hi (arithmetic-shift val -8)]
+        [lo (bitwise-and val #xff)])
+    (stack-push r m hi)
+    (stack-push r m lo)))
+
+(: stack-pop (-> registers (Instance Memory%) Integer))
+(define (stack-pop r m)
+  (begin (set-registers-s! r (add1 (registers-s r)))
+         (send m read (+ stack-base (registers-s r)))))
+
+(: stack-pop-u16 (-> registers (Instance Memory%) Integer))
+(define (stack-pop-u16 r m)
+  (let ([lo (stack-pop r m)]
+        [hi (stack-pop r m)])
+    (bitwise-ior (arithmetic-shift hi 8)
+                 lo)))
 
 (define-type Addressing (-> registers (Instance Memory%) Integer))
 
@@ -225,6 +252,44 @@
         (instruction 'DEC 3 6 get-address-absolute)
         #xde
         (instruction 'DEC 3 7 get-address-absolute-x)
+        #xca
+        (instruction 'DEX 1 2 get-operand-implied)
+        #x88
+        (instruction 'DEY 1 2 get-operand-implied)
+        #x49
+        (instruction 'EOR 2 2 get-operand-immediate)
+        #x45
+        (instruction 'EOR 2 3 get-operand-zeropage)
+        #x55
+        (instruction 'EOR 2 4 get-operand-zeropage-x)
+        #x4d
+        (instruction 'EOR 3 4 get-operand-absolute)
+        #x5d
+        (instruction 'EOR 3 4 get-operand-absolute-x)
+        #x59
+        (instruction 'EOR 3 4 get-operand-absolute-y)
+        #x41
+        (instruction 'EOR 2 6 get-operand-indirect-x)
+        #x51
+        (instruction 'EOR 2 5 get-operand-indirect-y)
+        #xe6
+        (instruction 'INC 2 5 get-operand-zeropage)
+        #xf6
+        (instruction 'INC 2 6 get-operand-zeropage-x)
+        #xee
+        (instruction 'INC 3 6 get-operand-absolute)
+        #xfe
+        (instruction 'INC 3 7 get-operand-absolute-x)
+        #xe8
+        (instruction 'INX 1 2 get-operand-implied)
+        #xc8
+        (instruction 'INY 1 2 get-operand-implied)
+        #x4c
+        (instruction 'JMP 3 3 get-operand-absolute)
+        #x6c
+        (instruction 'JMP 3 5 get-operand-absolute)
+        #x20
+        (instruction 'JSR 3 6 get-operand-absolute)
         #xaa
         (instruction 'TAX 1 2 get-operand-implied)
         #xa9
@@ -369,6 +434,47 @@
       (send m write addr val)
       (update-zero-negative-flags! r val))))
 
+(: dex (-> registers Integer Void))
+(define (dex r val)
+  (begin (set-registers-x! r (sub1 (registers-x r)))
+         (update-zero-negative-flags! r (registers-x r))))
+
+(: dey (-> registers Integer Void))
+(define (dey r val)
+  (begin (set-registers-y! r (sub1 (registers-y r)))
+         (update-zero-negative-flags! r (registers-y r))))
+
+(: eor (-> registers Integer Void))
+(define (eor r val)
+  (set-registers-a-update! r (bitwise-xor (registers-a r)
+                                        val)))
+
+(: inc (-> registers (Instance Memory%) Integer Void))
+(define (inc r m addr)
+  (let ([val (add1 (send m read addr))])
+    (begin
+      (send m write addr val)
+      (update-zero-negative-flags! r val))))
+
+(: inx (-> registers Integer Void))
+(define (inx r val)
+  (begin (set-registers-x! r (add1 (registers-x r)))
+         (update-zero-negative-flags! r (registers-x r))))
+
+(: iny (-> registers Integer Void))
+(define (iny r val)
+  (begin (set-registers-y! r (add1 (registers-y r)))
+         (update-zero-negative-flags! r (registers-y r))))
+
+(: jmp (-> registers Integer Void))
+(define (jmp r val)
+  (set-registers-pc! r (- (+ (registers-pc r) val) 3)))
+
+(: jsr (-> registers (Instance Memory%) Integer Void))
+(define (jsr r m val)
+  (begin (stack-push-u16 r m val)
+         (set-registers-pc! r (- (send m read-u16 (add1 (registers-pc r))) 3))))
+
 (: lda (-> registers Integer Void))
 (define (lda r val)
   (begin
@@ -426,6 +532,14 @@
                           ['CPX (cpx r val)]
                           ['CPY (cpy r val)]
                           ['DEC (dec r m val)]
+                          ['DEX (dex r val)]
+                          ['DEY (dey r val)]
+                          ['EOR (eor r val)]
+                          ['INC (inc r m val)]
+                          ['INX (inx r val)]
+                          ['INY (iny r val)]
+                          ['JMP (jmp r val)]
+                          ['JSR (jsr r m val)]
                           ['LDA (lda r val)]
                           ['TAX (tax r)])
                         (set-registers-pc! r (+ (registers-pc r) len))))
