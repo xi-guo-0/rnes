@@ -30,27 +30,25 @@
 
 (: stack-push (-> registers (Instance Memory%) Integer Void))
 (define (stack-push r m val)
-  (begin (send m write (+ stack-base (registers-s r)) val)
-         (set-registers-s! r (sub1 (registers-s r)))))
+  (begin
+    (send m write (+ stack-base (registers-s r)) val)
+    (set-registers-s! r (sub1 (registers-s r)))))
 
 (: stack-push-u16 (-> registers (Instance Memory%) Integer Void))
 (define (stack-push-u16 r m val)
-  (let ([hi (arithmetic-shift val -8)]
-        [lo (bitwise-and val #xff)])
+  (let ([hi (arithmetic-shift val -8)] [lo (bitwise-and val #xff)])
     (stack-push r m hi)
     (stack-push r m lo)))
 
 (: stack-pop (-> registers (Instance Memory%) Integer))
 (define (stack-pop r m)
-  (begin (set-registers-s! r (add1 (registers-s r)))
-         (send m read (+ stack-base (registers-s r)))))
+  (begin
+    (set-registers-s! r (add1 (registers-s r)))
+    (send m read (+ stack-base (registers-s r)))))
 
 (: stack-pop-u16 (-> registers (Instance Memory%) Integer))
 (define (stack-pop-u16 r m)
-  (let ([lo (stack-pop r m)]
-        [hi (stack-pop r m)])
-    (bitwise-ior (arithmetic-shift hi 8)
-                 lo)))
+  (let ([lo (stack-pop r m)] [hi (stack-pop r m)]) (bitwise-ior (arithmetic-shift hi 8) lo)))
 
 (define-type Addressing (-> registers (Instance Memory%) Integer))
 
@@ -299,7 +297,39 @@
         #xb5
         (instruction 'LDA 2 4 get-operand-zeropage-x)
         #xad
-        (instruction 'LDA 3 4 get-operand-absolute)))
+        (instruction 'LDA 3 4 get-operand-absolute)
+        #xa2
+        (instruction 'LDX 2 2 get-operand-immediate)
+        #xa6
+        (instruction 'LDX 2 3 get-operand-zeropage)
+        #xb6
+        (instruction 'LDX 2 4 get-operand-zeropage-y)
+        #xae
+        (instruction 'LDX 3 4 get-operand-absolute)
+        #xbe
+        (instruction 'LDX 3 4 get-operand-absolute-y)
+        #xa0
+        (instruction 'LDY 2 2 get-operand-immediate)
+        #xa4
+        (instruction 'LDY 2 3 get-operand-zeropage)
+        #xb4
+        (instruction 'LDY 2 4 get-operand-zeropage-x)
+        #xac
+        (instruction 'LDY 3 4 get-operand-absolute)
+        #xbc
+        (instruction 'LDY 3 4 get-operand-absolute-x)
+        #x4a
+        (instruction 'LSR-A 1 2 get-operand-accumulator)
+        #x46
+        (instruction 'LSR-M 2 5 get-address-zeropage)
+        #x56
+        (instruction 'LSR-M 2 6 get-address-zeropage-x)
+        #x4e
+        (instruction 'LSR-M 3 6 get-address-absolute)
+        #x5e
+        (instruction 'LSR-M 3 7 get-address-absolute-x)
+        #xea
+        (instruction 'NOP 1 2 get-operand-implied)))
 
 (: update-zero-flag! (-> registers Integer Void))
 (define (update-zero-flag! r val)
@@ -436,18 +466,19 @@
 
 (: dex (-> registers Integer Void))
 (define (dex r val)
-  (begin (set-registers-x! r (sub1 (registers-x r)))
-         (update-zero-negative-flags! r (registers-x r))))
+  (begin
+    (set-registers-x! r (sub1 (registers-x r)))
+    (update-zero-negative-flags! r (registers-x r))))
 
 (: dey (-> registers Integer Void))
 (define (dey r val)
-  (begin (set-registers-y! r (sub1 (registers-y r)))
-         (update-zero-negative-flags! r (registers-y r))))
+  (begin
+    (set-registers-y! r (sub1 (registers-y r)))
+    (update-zero-negative-flags! r (registers-y r))))
 
 (: eor (-> registers Integer Void))
 (define (eor r val)
-  (set-registers-a-update! r (bitwise-xor (registers-a r)
-                                        val)))
+  (set-registers-a-update! r (bitwise-xor (registers-a r) val)))
 
 (: inc (-> registers (Instance Memory%) Integer Void))
 (define (inc r m addr)
@@ -458,13 +489,15 @@
 
 (: inx (-> registers Integer Void))
 (define (inx r val)
-  (begin (set-registers-x! r (add1 (registers-x r)))
-         (update-zero-negative-flags! r (registers-x r))))
+  (begin
+    (set-registers-x! r (add1 (registers-x r)))
+    (update-zero-negative-flags! r (registers-x r))))
 
 (: iny (-> registers Integer Void))
 (define (iny r val)
-  (begin (set-registers-y! r (add1 (registers-y r)))
-         (update-zero-negative-flags! r (registers-y r))))
+  (begin
+    (set-registers-y! r (add1 (registers-y r)))
+    (update-zero-negative-flags! r (registers-y r))))
 
 (: jmp (-> registers Integer Void))
 (define (jmp r val)
@@ -472,14 +505,44 @@
 
 (: jsr (-> registers (Instance Memory%) Integer Void))
 (define (jsr r m val)
-  (begin (stack-push-u16 r m val)
-         (set-registers-pc! r (- (send m read-u16 (add1 (registers-pc r))) 3))))
+  (begin
+    (stack-push-u16 r m val)
+    (set-registers-pc! r (- (send m read-u16 (add1 (registers-pc r))) 3))))
 
 (: lda (-> registers Integer Void))
 (define (lda r val)
   (begin
     (set-registers-a! r val)
     (update-zero-negative-flags! r (registers-a r))))
+
+(: ldx (-> registers Integer Void))
+(define (ldx r val)
+  (begin
+    (set-registers-x! r val)
+    (update-zero-negative-flags! r (registers-x r))))
+
+(: ldy (-> registers Integer Void))
+(define (ldy r val)
+  (begin
+    (set-registers-y! r val)
+    (update-zero-negative-flags! r (registers-y r))))
+
+(: lsr-a (-> registers Void))
+(define (lsr-a r)
+  (begin
+    (set-registers-c! r (odd? (registers-a r)))
+    (set-registers-a-update! r (arithmetic-shift (registers-a r) -1))))
+
+(: lsr-m (-> registers (Instance Memory%) Integer Void))
+(define (lsr-m r m addr)
+  (let* ([val (send m read addr)] [c (odd? val)] [v (arithmetic-shift val -1)])
+    (begin
+      (set-registers-c! r c)
+      (send m write addr v)
+      (update-zero-negative-flags! r v))))
+
+(define (nop)
+  (void))
 
 (: tax (-> registers Void))
 (define (tax r)
@@ -541,6 +604,11 @@
                           ['JMP (jmp r val)]
                           ['JSR (jsr r m val)]
                           ['LDA (lda r val)]
+                          ['LDX (ldx r val)]
+                          ['LDY (ldy r val)]
+                          ['LSR-A (lsr-a r)]
+                          ['LSR-M (lsr-m r m val)]
+                          ['NOP (nop)]
                           ['TAX (tax r)])
                         (set-registers-pc! r (+ (registers-pc r) len))))
                     (error "no such insturction"))
