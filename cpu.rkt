@@ -329,7 +329,51 @@
         #x5e
         (instruction 'LSR-M 3 7 get-address-absolute-x)
         #xea
-        (instruction 'NOP 1 2 get-operand-implied)))
+        (instruction 'NOP 1 2 get-operand-implied)
+        #x09
+        (instruction 'ORA 2 2 get-operand-immediate)
+        #x05
+        (instruction 'ORA 2 3 get-operand-zeropage)
+        #x15
+        (instruction 'ORA 2 4 get-operand-zeropage-x)
+        #x0d
+        (instruction 'ORA 3 4 get-operand-absolute)
+        #x1d
+        (instruction 'ORA 3 4 get-operand-absolute-x)
+        #x19
+        (instruction 'ORA 3 4 get-operand-absolute-y)
+        #x01
+        (instruction 'ORA 2 6 get-operand-indirect-x)
+        #x11
+        (instruction 'ORA 2 5 get-operand-indirect-y)
+        #x48
+        (instruction 'PHA 1 3 get-operand-implied)
+        #x08
+        (instruction 'PHP 1 3 get-operand-implied)
+        #x68
+        (instruction 'PLA 1 4 get-operand-implied)
+        #x28
+        (instruction 'PLP 1 4 get-operand-implied)
+        #x2a
+        (instruction 'ROL-A 1 2 get-operand-implied)
+        #x26
+        (instruction 'ROL-M 2 5 get-address-zeropage)
+        #x36
+        (instruction 'ROL-M 2 6 get-address-zeropage-x)
+        #x2e
+        (instruction 'ROL-M 3 6 get-address-absolute)
+        #x3e
+        (instruction 'ROL-M 3 7 get-address-absolute-x)
+        #x6a
+        (instruction 'ROR-A 1 2 get-operand-implied)
+        #x66
+        (instruction 'ROR-M 2 5 get-address-zeropage)
+        #x76
+        (instruction 'ROR-M 2 6 get-address-zeropage-x)
+        #x6e
+        (instruction 'ROR-M 3 6 get-address-absolute)
+        #x7e
+        (instruction 'ROR-M 3 7 get-address-absolute-x)))
 
 (: update-zero-flag! (-> registers Integer Void))
 (define (update-zero-flag! r val)
@@ -544,6 +588,82 @@
 (define (nop)
   (void))
 
+(: ora (-> registers Integer Void))
+(define (ora r val)
+  (set-registers-a! r (bitwise-ior (registers-a r) val)))
+
+(: pha (-> registers (Instance Memory%) Void))
+(define (pha r m)
+  (stack-push r m (registers-a r)))
+
+(: php (-> registers (Instance Memory%) Void))
+(define (php r m)
+  (let ([p (bitwise-ior (arithmetic-shift (if (registers-c r) 1 0) 0)
+                        (arithmetic-shift (if (registers-z r) 1 0) 1)
+                        (arithmetic-shift (if (registers-i r) 1 0) 2)
+                        (arithmetic-shift (if (registers-d r) 1 0) 3)
+                        (arithmetic-shift (if (registers-b r) 1 0) 4)
+                        (arithmetic-shift 1 5)
+                        (arithmetic-shift (if (registers-v r) 1 0) 6)
+                        (arithmetic-shift (if (registers-n r) 1 0) 7))])
+    (stack-push r m p)))
+
+(: pla (-> registers (Instance Memory%) Void))
+(define (pla r m)
+  (set-registers-a-update! r (stack-pop r m)))
+
+(: plp (-> registers (Instance Memory%) Void))
+(define (plp r m)
+  (let ([p (stack-pop r m)])
+    (begin
+      (set-registers-c! r (bitwise-bit-set? p 0))
+      (set-registers-z! r (bitwise-bit-set? p 1))
+      (set-registers-i! r (bitwise-bit-set? p 2))
+      (set-registers-d! r (bitwise-bit-set? p 3))
+      (set-registers-b! r (bitwise-bit-set? p 4))
+      (set-registers-v! r (bitwise-bit-set? p 6))
+      (set-registers-n! r (bitwise-bit-set? p 7)))))
+
+(: rol-a (-> registers Void))
+(define (rol-a r)
+  (let ([c (registers-c r)])
+    (begin
+      (set-registers-c! r (bitwise-bit-set? (registers-a r) 7))
+      (set-registers-a-update! r
+                               (bitwise-ior (bitwise-and (arithmetic-shift (registers-a r) 1) #xff)
+                                            (if c 1 0))))))
+
+(: rol-m (-> registers (Instance Memory%) Integer Void))
+(define (rol-m r m addr)
+  (let* ([c (registers-c r)]
+         [a (send m read addr)]
+         [val (bitwise-ior (bitwise-and (arithmetic-shift a 1) #xff) (if c 1 0))])
+    (begin
+      (set-registers-c! r (bitwise-bit-set? a 7))
+      (send m write addr val)
+      (update-zero-negative-flags! r val))))
+
+(: ror-a (-> registers Void))
+(define (ror-a r)
+  (let* ([c (registers-c r)]
+         [a (registers-a r)]
+         [val (bitwise-ior (bitwise-and (arithmetic-shift a -1) #xff)
+                           (arithmetic-shift (if c 1 0) 7))])
+    (begin
+      (set-registers-c! r (bitwise-bit-set? a 0))
+      (set-registers-a-update! r val))))
+
+(: ror-m (-> registers (Instance Memory%) Integer Void))
+(define (ror-m r m addr)
+  (let* ([c (registers-c r)]
+         [a (send m read addr)]
+         [val (bitwise-ior (bitwise-and (arithmetic-shift a -1) #xff)
+                           (arithmetic-shift (if c 1 0) 7))])
+    (begin
+      (set-registers-c! r (bitwise-bit-set? a 0))
+      (send m write addr val)
+      (update-zero-negative-flags! r val))))
+
 (: tax (-> registers Void))
 (define (tax r)
   (begin
@@ -609,7 +729,16 @@
                           ['LSR-A (lsr-a r)]
                           ['LSR-M (lsr-m r m val)]
                           ['NOP (nop)]
-                          ['TAX (tax r)])
+                          ['ORA (ora r val)]
+                          ['TAX (tax r)]
+                          ['PHA (pha r m)]
+                          ['PHP (php r m)]
+                          ['PLA (pla r m)]
+                          ['PLP (plp r m)]
+                          ['ROL-A (rol-a r)]
+                          ['ROL-M (rol-m r m val)]
+                          ['ROR-A (ror-a r)]
+                          ['ROR-M (ror-m r m val)])
                         (set-registers-pc! r (+ (registers-pc r) len))))
                     (error "no such insturction"))
                 (loop))))))
