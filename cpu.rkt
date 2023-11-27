@@ -13,6 +13,7 @@
                        [i : Boolean]
                        [d : Boolean]
                        [b : Boolean]
+                       [b2 : Boolean]
                        [v : Boolean]
                        [n : Boolean])
   #:mutable)
@@ -22,7 +23,7 @@
 
 (: create-cpu (-> registers))
 (define (create-cpu)
-  (registers 0 0 0 stack-init-val 0 #f #f #f #f #f #f #f))
+  (registers 0 0 0 stack-init-val 0 #f #f #f #f #f #f #f #f))
 
 (: read-u16-after-pc Addressing)
 (define (read-u16-after-pc r m)
@@ -612,17 +613,21 @@
 (define (pla r m)
   (set-registers-a-update! r (stack-pop r m)))
 
-(: plp (-> registers (Instance Memory%) Void))
-(define (plp r m)
-  (let ([p (stack-pop r m)])
-    (begin
+(: set-status! (-> registers Integer Void))
+(define (set-status! r p)
+  (begin
       (set-registers-c! r (bitwise-bit-set? p 0))
       (set-registers-z! r (bitwise-bit-set? p 1))
       (set-registers-i! r (bitwise-bit-set? p 2))
       (set-registers-d! r (bitwise-bit-set? p 3))
       (set-registers-b! r (bitwise-bit-set? p 4))
       (set-registers-v! r (bitwise-bit-set? p 6))
-      (set-registers-n! r (bitwise-bit-set? p 7)))))
+      (set-registers-n! r (bitwise-bit-set? p 7))))
+
+(: plp (-> registers (Instance Memory%) Void))
+(define (plp r m)
+  (let ([p (stack-pop r m)])
+    (set-status! r p)))
 
 (: rol-a (-> registers Void))
 (define (rol-a r)
@@ -663,6 +668,19 @@
       (set-registers-c! r (bitwise-bit-set? a 0))
       (send m write addr val)
       (update-zero-negative-flags! r val))))
+
+(: rti (-> registers (Instance Memory%) Void))
+(define (rti r m)
+  (begin (set-status! r (stack-pop r m))
+         (set-registers-b! r #f)
+         (set-registers-b2! r #t)
+         (set-registers-pc! r (- (stack-pop-u16 r m)
+                                 1))))
+
+(: rts (-> registers (Instance Memory%) Void))
+(define (rts r m)
+  (begin (set-registers-pc! r (stack-pop-u16 r m))))
+
 
 (: tax (-> registers Void))
 (define (tax r)
