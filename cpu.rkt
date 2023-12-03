@@ -81,6 +81,21 @@
 (define (get-address-absolute-y r m)
   (+ (read-u16-after-pc r m) (registers-y r)))
 
+(: get-address-indirect-x Addressing)
+(define (get-address-indirect-x r m)
+  (let* ([base (+ (get-operand-immediate r m) (registers-x r))]
+         [lo (send m read base)]
+         [hi (send m read (add1 base))])
+    (bitwise-ior (arithmetic-shift hi 8) lo)))
+
+(: get-address-indirect-y Addressing)
+(define (get-address-indirect-y r m)
+  (let* ([base (get-operand-immediate r m)]
+         [lo (send m read base)]
+         [hi (send m read (add1 base))]
+         [deref-base (bitwise-ior (arithmetic-shift hi 8) lo)])
+    (+ deref-base (registers-y r))))
+
 (: get-operand-accumulator Addressing)
 (define (get-operand-accumulator r m)
   (registers-a r))
@@ -374,7 +389,71 @@
         #x6e
         (instruction 'ROR-M 3 6 get-address-absolute)
         #x7e
-        (instruction 'ROR-M 3 7 get-address-absolute-x)))
+        (instruction 'ROR-M 3 7 get-address-absolute-x)
+        #x40
+        (instruction 'RTI 1 6 get-operand-implied)
+        #x60
+        (instruction 'RTS 1 6 get-operand-implied)
+        #xe9
+        (instruction 'SBC 2 2 get-operand-immediate)
+        #xe5
+        (instruction 'SBC 2 3 get-operand-zeropage)
+        #xf5
+        (instruction 'SBC 2 4 get-operand-zeropage-x)
+        #xed
+        (instruction 'SBC 3 4 get-operand-absolute)
+        #xfd
+        (instruction 'SBC 3 4 get-operand-absolute-x)
+        #xf9
+        (instruction 'SBC 3 4 get-operand-absolute-y)
+        #xe1
+        (instruction 'SBC 2 6 get-operand-indirect-x)
+        #xf1
+        (instruction 'SBC 2 5 get-operand-indirect-y)
+        #x38
+        (instruction 'SEC 1 2 get-operand-implied)
+        #xf8
+        (instruction 'SED 1 2 get-operand-implied)
+        #x78
+        (instruction 'SEI 1 2 get-operand-implied)
+        #x85
+        (instruction 'STA 2 3 get-address-zeropage)
+        #x95
+        (instruction 'STA 2 4 get-address-zeropage-x)
+        #x8d
+        (instruction 'STA 3 4 get-address-absolute)
+        #x9d
+        (instruction 'STA 3 5 get-address-absolute-x)
+        #x99
+        (instruction 'STA 3 5 get-address-absolute-y)
+        #x81
+        (instruction 'STA 2 6 get-address-indirect-x)
+        #x91
+        (instruction 'STA 2 6 get-address-indirect-y)
+        #x86
+        (instruction 'STX 2 3 get-address-zeropage)
+        #x96
+        (instruction 'STX 2 4 get-address-zeropage-y)
+        #x8e
+        (instruction 'STX 3 4 get-address-absolute)
+        #x84
+        (instruction 'STY 2 3 get-address-zeropage)
+        #x94
+        (instruction 'STY 2 4 get-address-zeropage-x)
+        #x8c
+        (instruction 'STY 3 4 get-address-absolute)
+        #xaa
+        (instruction 'TAX 1 2 get-operand-implied)
+        #xa8
+        (instruction 'TAY 1 2 get-operand-implied)
+        #xba
+        (instruction 'TSX 1 2 get-operand-implied)
+        #x8a
+        (instruction 'TXA 1 2 get-operand-implied)
+        #x9a
+        (instruction 'TXS 1 2 get-operand-implied)
+        #x98
+        (instruction 'TYA 1 2 get-operand-implied)))
 
 (: update-zero-flag! (-> registers Integer Void))
 (define (update-zero-flag! r val)
@@ -616,18 +695,17 @@
 (: set-status! (-> registers Integer Void))
 (define (set-status! r p)
   (begin
-      (set-registers-c! r (bitwise-bit-set? p 0))
-      (set-registers-z! r (bitwise-bit-set? p 1))
-      (set-registers-i! r (bitwise-bit-set? p 2))
-      (set-registers-d! r (bitwise-bit-set? p 3))
-      (set-registers-b! r (bitwise-bit-set? p 4))
-      (set-registers-v! r (bitwise-bit-set? p 6))
-      (set-registers-n! r (bitwise-bit-set? p 7))))
+    (set-registers-c! r (bitwise-bit-set? p 0))
+    (set-registers-z! r (bitwise-bit-set? p 1))
+    (set-registers-i! r (bitwise-bit-set? p 2))
+    (set-registers-d! r (bitwise-bit-set? p 3))
+    (set-registers-b! r (bitwise-bit-set? p 4))
+    (set-registers-v! r (bitwise-bit-set? p 6))
+    (set-registers-n! r (bitwise-bit-set? p 7))))
 
 (: plp (-> registers (Instance Memory%) Void))
 (define (plp r m)
-  (let ([p (stack-pop r m)])
-    (set-status! r p)))
+  (let ([p (stack-pop r m)]) (set-status! r p)))
 
 (: rol-a (-> registers Void))
 (define (rol-a r)
@@ -671,22 +749,76 @@
 
 (: rti (-> registers (Instance Memory%) Void))
 (define (rti r m)
-  (begin (set-status! r (stack-pop r m))
-         (set-registers-b! r #f)
-         (set-registers-b2! r #t)
-         (set-registers-pc! r (- (stack-pop-u16 r m)
-                                 1))))
+  (begin
+    (set-status! r (stack-pop r m))
+    (set-registers-b! r #f)
+    (set-registers-b2! r #t)
+    (set-registers-pc! r (- (stack-pop-u16 r m) 1))))
 
 (: rts (-> registers (Instance Memory%) Void))
 (define (rts r m)
-  (begin (set-registers-pc! r (stack-pop-u16 r m))))
+  (begin
+    (set-registers-pc! r (stack-pop-u16 r m))))
 
+(: sbc (-> registers Integer Void))
+(define (sbc r val)
+  (set-registers-a-update! r (- (registers-a r) val 1)))
+
+(: sec (-> registers Void))
+(define (sec r)
+  (set-registers-c! r #t))
+
+(: sed (-> registers Void))
+(define (sed r)
+  (set-registers-d! r #t))
+
+(: sei (-> registers Void))
+(define (sei r)
+  (set-registers-i! r #t))
+
+(: sta (-> registers (Instance Memory%) Integer Void))
+(define (sta r m addr)
+  (send m write addr (registers-a r)))
+
+(: stx (-> registers (Instance Memory%) Integer Void))
+(define (stx r m addr)
+  (send m write addr (registers-x r)))
+
+(: sty (-> registers (Instance Memory%) Integer Void))
+(define (sty r m addr)
+  (send m write addr (registers-y r)))
 
 (: tax (-> registers Void))
 (define (tax r)
   (begin
     (set-registers-x! r (registers-a r))
     (update-zero-negative-flags! r (registers-x r))))
+
+(: tay (-> registers Void))
+(define (tay r)
+  (begin
+    (set-registers-y! r (registers-a r))
+    (update-zero-negative-flags! r (registers-y r))))
+
+(: tsx (-> registers Void))
+(define (tsx r)
+  (begin
+    (set-registers-x! r (registers-s r))
+    (update-zero-negative-flags! r (registers-x r))))
+
+(: txa (-> registers Void))
+(define (txa r)
+  (set-registers-a-update! r (registers-x r)))
+
+(: txs (-> registers Void))
+(define (txs r)
+  (begin
+    (set-registers-s! r (registers-x r))
+    (update-zero-negative-flags! r (registers-s r))))
+
+(: tya (-> registers Void))
+(define (tya r)
+  (set-registers-a-update! r (registers-y r)))
 
 (: interpret (-> registers (Instance Memory%) Void))
 (define (interpret r m)
@@ -756,7 +888,22 @@
                           ['ROL-A (rol-a r)]
                           ['ROL-M (rol-m r m val)]
                           ['ROR-A (ror-a r)]
-                          ['ROR-M (ror-m r m val)])
+                          ['ROR-M (ror-m r m val)]
+                          ['RTI (rti r m)]
+                          ['RTS (rts r m)]
+                          ['SBC (sbc r val)]
+                          ['SEC (sec r)]
+                          ['SED (sed r)]
+                          ['SEI (sei r)]
+                          ['STA (sta r m val)]
+                          ['STX (stx r m val)]
+                          ['STY (sty r m val)]
+                          ['TAX (tax r)]
+                          ['TAY (tay r)]
+                          ['TSX (tsx r)]
+                          ['TXA (txa r)]
+                          ['TXS (tsx r)]
+                          ['TYA (tya r)])
                         (set-registers-pc! r (+ (registers-pc r) len))))
                     (error "no such insturction"))
                 (loop))))))
